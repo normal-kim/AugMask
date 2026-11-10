@@ -98,7 +98,7 @@ def run(dataset, mechanism, p, method, seed=0, artifacts="artifacts", out="runs"
         tmp.write_text(json.dumps({"mle": mle(real, test, schema)}))
         os.replace(tmp, ref_path)
     metrics = evaluate(real, syn, test, schema, json.loads(ref_path.read_text())["mle"])
-    metrics |= {"seconds": round(seconds, 1), "checks": sample_checks(real, syn, schema)}
+    metrics |= {"seconds": round(seconds, 1), "fills": len(scn.train_draws), "checks": sample_checks(real, syn, schema)}
     (run_dir / f"{method}.json").write_text(json.dumps(metrics, indent=2))
     return metrics
 

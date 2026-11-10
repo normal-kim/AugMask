@@ -19,4 +19,5 @@ dependencies:
       - xlrd==2.0.2
       - ForestDiffusion==1.0.6
       - pytest==9.2.0
+      - matplotlib==3.10.9
       - -e .

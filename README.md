@@ -65,7 +65,8 @@ from augmask.run import run
 class MyAugmenter:
     def augment(self, train, others, n_categories):
         # fit on `train` (an Encoded table); return [(X_num, X_cat), ...] for `train` and each of `others`,
-        # with every missing entry filled: floats in X_num, codes 0 … K_j−1 in X_cat
+        # with every missing entry filled: floats in X_num, codes 0 … K_j−1 in X_cat.
+        # It is called once per fill (5 by default), so return a new random draw on each call.
         ...
 
 run("adult", "mcar", 0.5, "tabdiff-augmask", augmenter=MyAugmenter())
@@ -240,7 +241,7 @@ augmask/
 │   └── schema.py        # column types, target and task
 ├── models/              # step 7
 │   ├── tabddpm.py, cdtd.py, tabdiff.py   # the backbones, each with an optional loss mask
-│   └── common.py        # seeding, batching, EMA
+│   └── common.py        # seeding, batching (one fill per step), EMA
 └── baselines/
     ├── forestdiff.py    # the official ForestDiffusion package, wrapped
     └── miwae.py
@@ -248,14 +249,14 @@ scripts/
 ├── run_all.sh           # all experiments, then the summary tables
 ├── make_tables.py       # rank tables with Wilcoxon markers
 └── plot_overview.py     # the figure above
-tests/                   # pipeline, missingness, baselines, evaluation, each backbone
+tests/                   # pipeline, missingness, baselines, evaluation, each backbone, the runner
 ```
 
 </details>
 
 ## 📝 Notes on this release
 
-The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Most model and training settings follow Appendix C.6 of the paper. The exception is alternating fills: AugFull and AugMask alternate between 5 fills of the missing inputs during training, which performs better at high missing rates in this implementation (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
+The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Most model and training settings follow Appendix C.6 of the paper. The exception is alternating fills: AugFull and AugMask alternate between 5 fills of the missing inputs during training, which performs better at high missing rates in this implementation (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=augmask.augment.LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
 
 LGBM-S is a per-coordinate augmenter: it draws each missing entry independently given the observed ones, so it does not model the dependence between entries that are missing together. An augmenter that samples the missing coordinates jointly is a natural direction for future work, and can be plugged in as described in [Your own augmenter](#your-own-augmenter).
 

@@ -39,7 +39,8 @@ def train_batches(tensors: Sequence[torch.Tensor | None], batch_size: int) -> It
 
 def as_fills(train) -> list:
     """``train`` is (X_num, X_cat, M_num, M_cat) or a list of such tuples: several fills of the same rows."""
-    return list(train) if isinstance(train, list) else [train]
+    several = isinstance(train, list) and all(isinstance(t, (tuple, list)) for t in train)
+    return list(train) if several else [train]
 
 
 def rotating_batches(fills: Sequence[Sequence[torch.Tensor | None]], batch_size: int) -> Iterator[list]:

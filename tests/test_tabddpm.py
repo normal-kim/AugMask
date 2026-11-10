@@ -61,5 +61,7 @@ def test_fills_are_rotated():
     one = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit(toy(), seed=0).sample(20, seed=1)
     listed = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit([toy()], seed=0).sample(20, seed=1)
     assert all(np.array_equal(a, b) for a, b in zip(one, listed))  # one fill in a list is the same run
+    plain = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit(list(toy()), seed=0).sample(20, seed=1)
+    assert all(np.array_equal(a, b) for a, b in zip(one, plain))  # so is one fill given as a list of arrays
     two = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit([toy(), toy(seed=5)], seed=0).sample(20, seed=1)
     assert np.isfinite(two[0]).all()
