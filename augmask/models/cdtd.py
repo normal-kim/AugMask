@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .common import eval_batches, set_seed, to_tensors, train_batches
+from .common import as_fills, eval_batches, rotating_batches, set_seed, to_tensors
 
 DEFAULTS = {
     # score network
@@ -256,19 +256,21 @@ class CDTD:
         self.config = {**DEFAULTS, **config}
 
     def fit(self, train, val=None, seed: int = 0) -> "CDTD":
-        """train/val: (X_num, X_cat, M_num, M_cat). Trains the full schedule and keeps the final
-        EMA weights; with val, the validation loss is logged in ``history_``."""
+        """train/val: (X_num, X_cat, M_num, M_cat); ``train`` may be a list of fills of the same rows,
+        used in turn (one per step). Trains the full schedule and keeps the final EMA weights; with val,
+        the validation loss is logged in ``history_``."""
         c, dev = self.config, self.device
-        x_cat = torch.as_tensor(np.asarray(train[1]), dtype=torch.long)
+        fills = as_fills(train)
+        x_cat = torch.as_tensor(np.asarray(fills[0][1]), dtype=torch.long)
         proportions = [torch.bincount(x_cat[:, j], minlength=k) / len(x_cat) for j, k in enumerate(self.n_categories)]
         set_seed(seed)
         self.net_ = net = _Diffusion(self.n_num, self.n_categories, proportions, c).to(dev)
         params = list(net.parameters())
         ema = [p.detach().clone() for p in params]
         opt = torch.optim.AdamW(params, lr=c["lr"], betas=c["betas"], eps=c["eps"], weight_decay=c["weight_decay"])
-        tr = to_tensors(train, dev)
+        trs = [to_tensors(t, dev) for t in fills]
         va = None if val is None else to_tensors(val, dev)
-        batches = train_batches(tr, c["batch_size"])
+        batches = rotating_batches(trs, c["batch_size"])
         self.history_ = []
         for step in range(1, c["num_steps_train"] + 1):
             opt.zero_grad()
@@ -282,7 +284,7 @@ class CDTD:
             if va is not None and step % c["validation_interval"] == 0:
                 with torch.no_grad():  # loss of the current (non-EMA) weights
                     vals = [net.loss(*b, self.loss_mask)["obs"].item()
-                            for b in islice(eval_batches(va, min(c["batch_size"], len(tr[0]))), c["val_batches"])]
+                            for b in islice(eval_batches(va, min(c["batch_size"], len(trs[0][0]))), c["val_batches"])]
                 self.history_.append({"step": step, "val": torch.tensor(vals).mean().item()})
             for g in opt.param_groups:  # the first step runs at the base lr
                 g["lr"] = _lr(step, c)

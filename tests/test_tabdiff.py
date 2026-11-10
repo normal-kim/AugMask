@@ -45,3 +45,9 @@ def test_last_feature_with_fewer_categories_than_features():
     data = (X_num, X_cat, rng.random((64, 2)) < 0.7, rng.random((64, 5)) < 0.7)
     X_num, X_cat = TabDiff(2, K2, True, device="cpu", **TINY).fit(data).sample(30)
     assert X_num.shape == (30, 2) and X_cat.shape == (30, 5) and ((X_cat >= 0) & (X_cat < np.array(K2))).all()
+
+
+def test_fills_are_rotated():
+    one, listed = fit_sample(toy(), True), fit_sample([toy()], True)
+    assert all(np.array_equal(a, b) for a, b in zip(one, listed))  # one fill in a list is the same run
+    assert np.isfinite(fit_sample([toy(), toy(seed=5)], True)[0]).all()

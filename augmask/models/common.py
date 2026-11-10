@@ -1,6 +1,7 @@
 """Small utilities shared by the diffusion backbones."""
 from __future__ import annotations
 
+import itertools
 import random
 from typing import Iterator, Sequence
 
@@ -34,6 +35,18 @@ def train_batches(tensors: Sequence[torch.Tensor | None], batch_size: int) -> It
         for start in range(0, n - bs + 1, bs):
             idx = perm[start:start + bs]
             yield [None if t is None else t[idx.to(t.device)] for t in tensors]
+
+
+def as_fills(train) -> list:
+    """``train`` is (X_num, X_cat, M_num, M_cat) or a list of such tuples: several fills of the same rows."""
+    return list(train) if isinstance(train, list) else [train]
+
+
+def rotating_batches(fills: Sequence[Sequence[torch.Tensor | None]], batch_size: int) -> Iterator[list]:
+    """Endless mini-batches that rotate through the fills, one fill per step (one fill: ``train_batches``)."""
+    streams = [train_batches(t, batch_size) for t in fills]
+    for i in itertools.count():
+        yield next(streams[i % len(streams)])
 
 
 def eval_batches(tensors: Sequence[torch.Tensor | None], batch_size: int) -> Iterator[list]:

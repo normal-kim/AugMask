@@ -12,7 +12,7 @@ Jungkyu Kim, Taeyoung Park, Kibok Lee. [[arXiv]](https://arxiv.org/abs/2606.0334
 
 AugMask fixes both:
 
-1. **Augment.** Each missing entry is filled once with a random draw from a model of its column given the other columns, so the inputs look like real data (right panel). This repository uses LGBM-S, a set of lightweight per-column LightGBM models, as the augmenter.
+1. **Augment.** Each missing entry is filled with a random draw from a model of its column given the other columns, so the inputs look like real data (right panel). This repository uses LGBM-S, a set of lightweight per-column LightGBM models, as the augmenter.
 2. **Mask.** The denoising loss is computed on observed entries only, so the filled values give context but are never targets.
 
 <picture>
@@ -38,9 +38,9 @@ pip install -e ".[all]"                                          # everything (p
 from augmask import Encoded, LGBMSAugmenter
 
 train = Encoded(X_num, X_cat, M_num, M_cat)
-(X_num_filled, X_cat_filled), = LGBMSAugmenter().augment(train, [], n_categories)
+fills = [LGBMSAugmenter(draw=k).augment(train, [], n_categories)[0] for k in range(5)]
 
-# train your denoiser on the filled table, with the loss restricted to observed entries
+# train your denoiser on fills[step % 5], with the loss restricted to observed entries
 loss = (per_entry_loss * mask).sum() / mask.sum()
 ```
 
@@ -53,7 +53,7 @@ The augmenter takes an encoded table with `n` rows:
 | `M_num`, `M_cat` | same as above | bool | `True` where observed |
 | `n_categories` | `d_cat` | list of int | number of categories `K_j` of each categorical column |
 
-It returns `X_num` and `X_cat` with every missing entry filled. In this repository the backbones then receive the filled `X_num` (float32, standardized), `X_cat` (int64 codes) and the masks, with the target as one of the columns (the first numerical column for regression, the first categorical column for classification).
+`augment` returns `X_num` and `X_cat` with every missing entry filled; each `draw` gives an independent fill, with the observed entries unchanged. In this repository the backbones then receive the fills, one per training step, as `X_num` (float32, standardized) and `X_cat` (int64 codes), together with the masks, with the target as one of the columns (the first numerical column for regression, the first categorical column for classification).
 
 ### Your own augmenter
 
@@ -94,9 +94,11 @@ Methods are `{tabddpm,cdtd,tabdiff}-{noaug,meanmask,augfull,augmask}`, plus the 
 | `augfull` (ours) | augmented draws (LGBM-S) | all entries |
 | `augmask` (ours) | augmented draws (LGBM-S) | observed entries |
 
+**Alternating fills.** For improved performance, this implementation gives `augfull` and `augmask` 5 independent fills of the missing inputs and alternates between them during training, one per step (`--fills 5`, the default). `--fills 1` uses the single fill of the paper. The gain is largest at high missing rates.
+
 **Masks and fills.** The first run of a scenario saves its missingness masks and augmented fills to `artifacts/<dataset>/<mechanism>/p<p>/seed<s>.npz`; later runs of the same scenario reuse them, so LGBM-S runs once per scenario rather than once per method.
 
-**Runtime.** LGBM-S takes a few seconds per scenario (fit on the train split, fill train and validation; AMD Ryzen 9 5950X, 32 threads):
+**Runtime.** LGBM-S takes a few seconds per fill (fit on the train split, fill train and validation; AMD Ryzen 9 5950X, 32 threads); the default 5 fills take about five times as long, once per scenario:
 
 | Missing | Adult | Default | Shoppers | Magic | Beijing | News |
 |---|---:|---:|---:|---:|---:|---:|
@@ -114,20 +116,18 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 |---|---:|---:|---:|---:|---:|
 | TabDDPM + NoAug | 68.2 | 54.7 | 45.1 | 8.7 | 66.0 |
 | TabDDPM + MeanMask | 94.9 | 88.5 | 91.9 | 28.3 | 74.5 |
-| TabDDPM + AugFull (ours) | 95.6 | 90.2 | 94.2 | 31.3 | 76.3 |
-| TabDDPM + AugMask (ours) | 92.4 | 87.5 | 91.3 | 34.8 | 78.3 |
-| CDTD + NoAug | — | — | — | — | — |
-| CDTD + MeanMask | — | — | — | — | — |
-| CDTD + AugFull (ours) | — | — | — | — | — |
-| CDTD + AugMask (ours) | — | — | — | — | — |
+| TabDDPM + AugFull (ours) | 95.7 | 90.2 | 93.5 | 31.7 | 75.6 |
+| TabDDPM + AugMask (ours) | 94.1 | 88.5 | 90.8 | 35.6 | 77.9 |
+| CDTD + NoAug | 68.5 | 55.7 | 44.5 | 9.1 | 66.2 |
+| CDTD + MeanMask | 93.6 | 84.5 | 93.2 | 23.0 | 73.6 |
+| CDTD + AugFull (ours) | 95.5 | 91.0 | 91.2 | 33.2 | 77.2 |
+| CDTD + AugMask (ours) | 97.8 | 93.4 | 98.0 | 37.8 | 76.7 |
 | TabDiff + NoAug | 66.9 | 54.3 | 43.8 | 9.0 | 67.9 |
 | TabDiff + MeanMask | 96.6 | 88.8 | 95.0 | 29.3 | 73.3 |
-| TabDiff + AugFull (ours) | 95.8 | 91.3 | 93.3 | 32.1 | 76.0 |
-| TabDiff + AugMask (ours) | **98.2** | **94.4** | **98.5** | **39.3** | **78.7** |
+| TabDiff + AugFull (ours) | 95.7 | 91.4 | 93.1 | 32.3 | 76.6 |
+| TabDiff + AugMask (ours) | **98.1** | **94.4** | **98.4** | **39.1** | **79.1** |
 | ForestDiff | 69.7 | 66.7 | 65.6 | 22.4 | 66.4 |
 | MIWAE | 97.5 | 85.2 | 97.1 | 29.1 | 72.4 |
-
-"—": being rerun with the current training settings.
 
 <details>
 <summary>Per scenario</summary>
@@ -138,16 +138,16 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 |---|---:|---:|---:|---:|---:|
 | TabDDPM + NoAug | 81.9 | 71.9 | 51.5 | 15.5 | 95.9 |
 | TabDDPM + MeanMask | 94.7 | 89.7 | 90.8 | 30.9 | 97.3 |
-| TabDDPM + AugFull (ours) | 96.9 | 93.1 | 98.1 | 35.7 | 96.8 |
-| TabDDPM + AugMask (ours) | 97.1 | 94.6 | 98.1 | 44.0 | **97.7** |
-| CDTD + NoAug | — | — | — | — | — |
-| CDTD + MeanMask | — | — | — | — | — |
-| CDTD + AugFull (ours) | — | — | — | — | — |
-| CDTD + AugMask (ours) | — | — | — | — | — |
+| TabDDPM + AugFull (ours) | 97.2 | 92.3 | 97.3 | 35.1 | 96.8 |
+| TabDDPM + AugMask (ours) | 96.2 | 92.6 | 95.7 | 43.3 | 97.2 |
+| CDTD + NoAug | 83.3 | 74.2 | 54.1 | 16.6 | 96.4 |
+| CDTD + MeanMask | 95.3 | 92.0 | 93.1 | 34.4 | 96.8 |
+| CDTD + AugFull (ours) | 96.7 | 94.0 | 94.8 | 37.9 | **97.9** |
+| CDTD + AugMask (ours) | 98.9 | 97.2 | 97.3 | **46.0** | 97.9 |
 | TabDiff + NoAug | 81.0 | 72.3 | 50.8 | 15.9 | 95.1 |
 | TabDiff + MeanMask | 96.2 | 93.6 | 96.1 | 35.7 | 97.5 |
-| TabDiff + AugFull (ours) | 97.1 | 94.2 | 98.4 | 36.3 | 96.9 |
-| TabDiff + AugMask (ours) | **99.2** | **97.7** | **98.6** | **46.3** | 97.6 |
+| TabDiff + AugFull (ours) | 97.1 | 94.2 | 98.1 | 36.5 | 97.2 |
+| TabDiff + AugMask (ours) | **99.1** | **97.8** | **99.4** | 45.4 | 97.7 |
 | ForestDiff | 90.7 | 91.3 | 95.4 | 34.8 | 97.0 |
 | MIWAE | 97.3 | 94.9 | 98.3 | 30.8 | 95.5 |
 
@@ -157,18 +157,18 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 |---|---:|---:|---:|---:|---:|
 | TabDDPM + NoAug | 66.3 | 46.2 | 10.9 | 1.8 | 71.7 |
 | TabDDPM + MeanMask | 94.6 | 85.4 | 92.9 | 11.8 | 93.7 |
-| TabDDPM + AugFull (ours) | 94.6 | 84.8 | 96.1 | 13.3 | 94.1 |
-| TabDDPM + AugMask (ours) | 91.8 | 83.7 | 93.5 | 30.1 | 94.8 |
-| CDTD + NoAug | — | — | — | — | — |
-| CDTD + MeanMask | — | — | — | — | — |
-| CDTD + AugFull (ours) | — | — | — | — | — |
-| CDTD + AugMask (ours) | — | — | — | — | — |
+| TabDDPM + AugFull (ours) | 94.6 | 85.0 | 95.8 | 13.6 | 92.4 |
+| TabDDPM + AugMask (ours) | 93.3 | 85.0 | 90.1 | 30.0 | 94.9 |
+| CDTD + NoAug | 69.0 | 50.1 | 11.9 | 1.9 | 70.0 |
+| CDTD + MeanMask | 93.2 | 75.3 | 90.3 | 9.1 | 87.5 |
+| CDTD + AugFull (ours) | 93.9 | 84.2 | 91.2 | 14.0 | 92.6 |
+| CDTD + AugMask (ours) | **97.9** | 90.9 | **99.1** | 30.9 | 94.0 |
 | TabDiff + NoAug | 65.9 | 47.1 | 10.5 | 1.8 | 78.9 |
 | TabDiff + MeanMask | 95.5 | 87.2 | 90.9 | 10.3 | 91.6 |
-| TabDiff + AugFull (ours) | 94.5 | 85.2 | 94.6 | 13.4 | 93.2 |
-| TabDiff + AugMask (ours) | 97.5 | **91.1** | **97.7** | **33.6** | **95.4** |
+| TabDiff + AugFull (ours) | 94.4 | 85.1 | 94.9 | 14.1 | 93.8 |
+| TabDiff + AugMask (ours) | 97.4 | **91.1** | 97.5 | **33.0** | **95.4** |
 | ForestDiff | 36.3 | 26.9 | 1.4 | 0.3 | 72.3 |
-| MIWAE | **97.6** | 89.1 | 96.5 | 14.2 | 92.0 |
+| MIWAE | 97.6 | 89.1 | 96.5 | 14.2 | 92.0 |
 
 **Beijing, 50% missing**
 
@@ -176,16 +176,16 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 |---|---:|---:|---:|---:|---:|
 | TabDDPM + NoAug | 74.2 | 64.1 | 70.3 | 15.9 | 50.5 |
 | TabDDPM + MeanMask | 95.3 | 92.1 | 92.0 | 37.4 | 58.0 |
-| TabDDPM + AugFull (ours) | 97.6 | 94.2 | 97.4 | 39.1 | 62.9 |
-| TabDDPM + AugMask (ours) | 96.6 | 91.7 | 94.0 | 38.4 | 66.2 |
-| CDTD + NoAug | — | — | — | — | — |
-| CDTD + MeanMask | — | — | — | — | — |
-| CDTD + AugFull (ours) | — | — | — | — | — |
-| CDTD + AugMask (ours) | — | — | — | — | — |
+| TabDDPM + AugFull (ours) | 97.6 | 94.8 | 97.2 | 39.8 | 62.3 |
+| TabDDPM + AugMask (ours) | 97.4 | 93.0 | 94.9 | 39.0 | 65.5 |
+| CDTD + NoAug | 72.2 | 64.8 | 68.1 | 16.6 | 56.4 |
+| CDTD + MeanMask | 95.2 | 92.7 | 97.0 | 39.6 | 64.6 |
+| CDTD + AugFull (ours) | 97.5 | 95.5 | 95.2 | 42.1 | 66.0 |
+| CDTD + AugMask (ours) | 98.5 | 96.0 | 98.5 | **42.9** | 62.8 |
 | TabDiff + NoAug | 72.2 | 64.4 | 69.2 | 16.4 | 53.5 |
 | TabDiff + MeanMask | 97.2 | 94.7 | 97.9 | 38.6 | 59.9 |
-| TabDiff + AugFull (ours) | 97.7 | 95.5 | 96.1 | **40.2** | 62.9 |
-| TabDiff + AugMask (ours) | **98.9** | **96.2** | **99.2** | 39.9 | **66.5** |
+| TabDiff + AugFull (ours) | 97.7 | 95.8 | 95.8 | 40.5 | 64.1 |
+| TabDiff + AugMask (ours) | **98.8** | **96.3** | **98.9** | 40.8 | **67.9** |
 | ForestDiff | 91.9 | 90.6 | 93.1 | 35.1 | 62.4 |
 | MIWAE | 97.8 | 87.1 | 97.2 | 39.2 | 58.3 |
 
@@ -195,16 +195,16 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 |---|---:|---:|---:|---:|---:|
 | TabDDPM + NoAug | 50.4 | 36.6 | 47.7 | 1.6 | 46.1 |
 | TabDDPM + MeanMask | 94.9 | 86.6 | 91.7 | 33.3 | 49.1 |
-| TabDDPM + AugFull (ours) | 93.5 | 88.8 | 85.0 | 37.2 | 51.4 |
-| TabDDPM + AugMask (ours) | 84.2 | 79.8 | 79.6 | 26.6 | 54.5 |
-| CDTD + NoAug | — | — | — | — | — |
-| CDTD + MeanMask | — | — | — | — | — |
-| CDTD + AugFull (ours) | — | — | — | — | — |
-| CDTD + AugMask (ours) | — | — | — | — | — |
+| TabDDPM + AugFull (ours) | 93.6 | 88.6 | 83.8 | 38.1 | 50.9 |
+| TabDDPM + AugMask (ours) | 89.6 | 83.4 | 82.7 | 30.1 | 53.9 |
+| CDTD + NoAug | 49.5 | 33.7 | 43.8 | 1.0 | 42.0 |
+| CDTD + MeanMask | 90.5 | 78.1 | 92.3 | 9.0 | 45.4 |
+| CDTD + AugFull (ours) | 93.7 | 90.4 | 83.6 | **38.8** | 52.2 |
+| CDTD + AugMask (ours) | 95.6 | 89.6 | 97.0 | 31.6 | 52.1 |
 | TabDiff + NoAug | 48.6 | 33.7 | 44.9 | 1.8 | 44.3 |
 | TabDiff + MeanMask | 97.4 | 79.8 | 95.2 | 32.3 | 44.3 |
-| TabDiff + AugFull (ours) | 93.9 | 90.4 | 84.1 | **38.3** | 50.8 |
-| TabDiff + AugMask (ours) | 97.3 | **92.6** | **98.6** | 37.6 | **55.4** |
+| TabDiff + AugFull (ours) | 93.8 | 90.8 | 83.7 | 38.2 | 51.2 |
+| TabDiff + AugMask (ours) | 97.0 | **92.6** | **98.0** | 37.3 | **55.6** |
 | ForestDiff | 59.7 | 58.1 | 72.4 | 19.6 | 33.7 |
 | MIWAE | **97.5** | 69.5 | 96.2 | 32.3 | 43.9 |
 
@@ -216,7 +216,7 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 2. **Split** each table 60/20/20 into train, validation and test.
 3. **Mask** train and validation entries (the target included) completely at random (MCAR) or depending on the other columns (MAR); the test split stays complete.
 4. **Encode**, using the observed train entries: numerical columns are quantile-normal transformed, categorical columns are integer encoded.
-5. **Fill** the missing entries with the train mean / mode, or with augmented draws (LGBM-S by default).
+5. **Fill** the missing entries with the train mean / mode, or with augmented draws (LGBM-S by default; 5 fills, alternated during training).
 6. **Standardize** the numerical columns.
 7. **Train** the backbone and sample as many rows as the train split.
 8. **Map** the samples back to the original columns and values.
@@ -254,7 +254,7 @@ tests/                   # pipeline, missingness, baselines, evaluation, each ba
 
 ## Notes on this release
 
-The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Model and training settings follow Appendix C.6 of the paper, except that CDTD trains its full schedule and keeps the final weights instead of early stopping: its validation loss is noisy enough to stop some runs after 10% of training. LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
+The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Model and training settings follow Appendix C.6 of the paper, except that CDTD trains its full schedule and keeps the final weights instead of early stopping: its validation loss is noisy enough to stop some runs after 10% of training. AugFull and AugMask alternate between 5 fills of the missing inputs during training for improved performance (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
 
 LGBM-S is a per-coordinate augmenter: it draws each missing entry independently given the observed ones, so it does not model the dependence between entries that are missing together. An augmenter that samples the missing coordinates jointly is a natural direction for future work, and can be plugged in as described in [Your own augmenter](#your-own-augmenter).
 

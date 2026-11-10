@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .common import ema_update, set_seed, to_tensors, train_batches
+from .common import as_fills, ema_update, rotating_batches, set_seed, to_tensors
 
 DEFAULTS = {  # paper configuration (Appendix C.6)
     "n_layers_hidden": 3, "n_units_hidden": 256, "dim_emb": 128, "num_timesteps": 1000,
@@ -159,17 +159,19 @@ class TabDDPM:
                 "num": loss_gauss.mean().detach()}
 
     def fit(self, train, val=None, seed: int = 0) -> "TabDDPM":
-        """Train for ``train_steps`` steps (AdamW, linear lr decay, EMA); ``val`` is unused."""
+        """Train for ``train_steps`` steps (AdamW, linear lr decay, EMA); ``val`` is unused.
+        ``train`` may be a list of fills of the same rows, used in turn (one per step)."""
         c = self.config
         set_seed(seed)
-        x_num, x_cat, m_num, m_cat = to_tensors(train, self.device)
+        fills = [to_tensors(t, self.device) for t in as_fills(train)]
         if not self.loss_mask:
-            m_num = m_cat = None
+            for f in fills:
+                f[2] = f[3] = None
         self.net_ = _MLP(self.n_num + sum(self.K), c["dim_emb"], c["n_layers_hidden"], c["n_units_hidden"])
         self.net_.to(self.device)
         self.ema_ = copy.deepcopy(self.net_).requires_grad_(False)
         opt = torch.optim.AdamW(self.net_.parameters(), lr=c["lr"], weight_decay=c["weight_decay"])
-        batches = train_batches([x_num, x_cat, m_num, m_cat], c["batch_size"])
+        batches = rotating_batches(fills, c["batch_size"])
         self.history_ = []
         for step in range(c["train_steps"]):
             opt.zero_grad()

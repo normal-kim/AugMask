@@ -7,6 +7,7 @@ The test split is never masked and stays in data space for evaluation.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ class Scenario:
     X_cat: dict[str, np.ndarray]  # model space, int64
     cat_modes: np.ndarray  # mode of the filled train codes (for out-of-range samples)
     num_integer: np.ndarray  # numerical columns whose observed train values are all integers
+    train_draws: list[tuple[np.ndarray, np.ndarray]]  # step-4 space: every fill of the train split (first = filled["train"])
 
     @property
     def M_num(self) -> dict[str, np.ndarray]:
@@ -49,6 +51,11 @@ class Scenario:
     @property
     def M_cat(self) -> dict[str, np.ndarray]:
         return {s: e.M_cat for s, e in self.encoded.items()}
+
+    @property
+    def train_fills(self) -> list[tuple[np.ndarray, np.ndarray]]:
+        """Model-space (X_num, X_cat) of every fill of the train split; the first is (X_num, X_cat)["train"]."""
+        return [(self.scaler.transform(xn).astype(np.float32), xc.astype(np.int64)) for xn, xc in self.train_draws]
 
     @property
     def n_categories(self) -> list[int]:
@@ -103,10 +110,13 @@ def build_scenario(
     seed: int,
     augmenter: Augmenter | None = None,
     artifact: dict | None = None,
+    n_fills: int = 1,
 ) -> Scenario:
     """Build a scenario. ``augmenter`` fills the missing inputs; the default is LGBM-S
-    (``LGBMSAugmenter(seed=42 + seed)``). With ``artifact`` (see ``load_artifact``) the masks, and
-    the fills of the default augmenter, are taken from a saved artifact instead of being regenerated."""
+    (``LGBMSAugmenter(seed=42 + seed)``). ``n_fills`` > 1 adds further independent fills of the train
+    split (``train_fills``), which the backbones rotate through during training. With ``artifact``
+    (see ``load_artifact``) the masks, and the fills of the default augmenter, are taken from a saved
+    artifact instead of being regenerated (fills the artifact lacks are drawn)."""
     default = augmenter is None
     augmenter = augmenter or LGBMSAugmenter(seed=42 + seed)
     if artifact is not None:
@@ -130,6 +140,12 @@ def build_scenario(
         filled = {s: _apply_fills(encoded[s], artifact, s) for s in MASKED_SPLITS}
     else:
         filled = dict(zip(MASKED_SPLITS, augmenter.augment(encoded["train"], [encoded["val"]], K)))
+    train_draws = [filled["train"]]
+    for k in range(1, n_fills):
+        if default and artifact is not None and f"fill_num_train_{k}" in artifact:
+            train_draws.append(_apply_fills(encoded["train"], artifact, f"train_{k}"))
+        else:
+            train_draws.append(_nth_draw(augmenter, k).augment(encoded["train"], [], K)[0])
 
     scaler = NumStandardizer().fit(encoded["train"].X_num, encoded["train"].M_num)
     X_num = {s: scaler.transform(filled[s][0]).astype(np.float32) for s in MASKED_SPLITS}
@@ -139,7 +155,15 @@ def build_scenario(
         dtype=np.int64,
     )
     return Scenario(schema, mechanism, p, seed, type(augmenter).__name__, default, split, masks, num_tf, cat_vocab, scaler,
-                    encoded, filled, X_num, X_cat, cat_modes, num_integer)
+                    encoded, filled, X_num, X_cat, cat_modes, num_integer, train_draws)
+
+
+def _nth_draw(augmenter, k: int):
+    """The augmenter for the k-th fill: LGBM-S takes a draw index; other augmenters draw anew on each call."""
+    if isinstance(augmenter, LGBMSAugmenter):
+        augmenter = copy.copy(augmenter)
+        augmenter.draw += k
+    return augmenter
 
 
 # ----------------------------------------------------------------------------- artifacts
@@ -161,6 +185,11 @@ def save_artifact(scn: Scenario, path) -> None:
         if scn.default_fills:
             payload[f"fill_num_{s}"] = scn.filled[s][0][~e.M_num]
             payload[f"fill_cat_{s}"] = scn.filled[s][1][~e.M_cat].astype(np.int32)
+    if scn.default_fills:
+        e = scn.encoded["train"]
+        for k, (xn, xc) in enumerate(scn.train_draws[1:], start=1):
+            payload[f"fill_num_train_{k}"] = xn[~e.M_num]
+            payload[f"fill_cat_train_{k}"] = xc[~e.M_cat].astype(np.int32)
     tmp = f"{path}.{os.getpid()}.tmp"  # write then rename, so parallel runs never read a partial file
     with open(tmp, "wb") as f:
         np.savez_compressed(f, **payload)
@@ -175,13 +204,18 @@ def load_artifact(path) -> dict:
     return art
 
 
+def artifact_fills(art: dict) -> int:
+    """Number of train fills an artifact holds (0 if it has none)."""
+    return ("fill_num_train" in art) + sum(k.startswith("fill_num_train_") for k in art)
+
+
 def _check_stats(art, num_tf, cat_vocab):
     if art["vocab"] != cat_vocab.vocab_ or not np.allclose(art["quantiles"], num_tf.qt_.quantiles_, equal_nan=True):
         raise ValueError("artifact does not match the rebuilt encoders; check the dataset version")
 
 
-def _apply_fills(e: Encoded, art: dict, split: str) -> tuple[np.ndarray, np.ndarray]:
+def _apply_fills(e: Encoded, art: dict, key: str) -> tuple[np.ndarray, np.ndarray]:
     X_num, X_cat = e.X_num.copy(), e.X_cat.copy()
-    X_num[~e.M_num] = art[f"fill_num_{split}"]
-    X_cat[~e.M_cat] = art[f"fill_cat_{split}"]
+    X_num[~e.M_num] = art[f"fill_num_{key}"]
+    X_cat[~e.M_cat] = art[f"fill_cat_{key}"]
     return X_num, X_cat

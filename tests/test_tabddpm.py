@@ -55,3 +55,11 @@ def test_loss_mask_ignores_outputs_at_unobserved_entries():
     a, b = loss_and_grads(0.0, True), loss_and_grads(1.0, True)
     assert all(torch.equal(u, v) for u, v in zip(a, b))
     assert loss_and_grads(0.0, False)[0] != loss_and_grads(1.0, False)[0]
+
+
+def test_fills_are_rotated():
+    one = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit(toy(), seed=0).sample(20, seed=1)
+    listed = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit([toy()], seed=0).sample(20, seed=1)
+    assert all(np.array_equal(a, b) for a, b in zip(one, listed))  # one fill in a list is the same run
+    two = TabDDPM(N_NUM, K, True, device="cpu", **TINY).fit([toy(), toy(seed=5)], seed=0).sample(20, seed=1)
+    assert np.isfinite(two[0]).all()

@@ -163,3 +163,36 @@ def test_custom_augmenter(tmp_path):
     assert (scn.filled["train"][0][~e.M_num] == 0).all() and (scn.filled["train"][1][~e.M_cat] == 0).all()
     save_artifact(scn, tmp_path / "s.npz")
     assert "fill_num_train" not in load_artifact(tmp_path / "s.npz")  # only the default LGBM-S fills are cached
+
+
+def test_extra_fills_redraw_only_the_missing_entries(tmp_path):
+    df, schema, split, one = build("regression")
+    _, _, _, three = build("regression", n_fills=3)
+    fills = three.train_fills
+    assert len(one.train_fills) == 1 and len(fills) == 3
+    assert np.array_equal(fills[0][0], one.X_num["train"]) and np.array_equal(fills[0][1], one.X_cat["train"])
+    assert np.array_equal(three.X_num["val"], one.X_num["val"])  # validation keeps the single fill
+    Mn, Mc = three.M_num["train"], three.M_cat["train"]
+    for X_num, X_cat in fills[1:]:
+        assert np.array_equal(X_num[Mn], fills[0][0][Mn]) and np.array_equal(X_cat[Mc], fills[0][1][Mc])
+        assert not np.array_equal(X_num[~Mn], fills[0][0][~Mn]) and not np.array_equal(X_cat[~Mc], fills[0][1][~Mc])
+    # artifacts keep every fill: fewer fills reuse a prefix, more are drawn on top
+    save_artifact(three, tmp_path / "s.npz")
+    art = load_artifact(tmp_path / "s.npz")
+    for n in (2, 4):
+        again = build_scenario(df, schema, split, "mcar", 0.5, seed=0, artifact=art, n_fills=n)
+        assert len(again.train_fills) == n
+        for a, b in zip(again.train_fills, fills):
+            assert np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])
+
+
+def test_custom_augmenter_is_called_once_per_fill():
+    class Counting(MeanModeFill):
+        calls = 0
+
+        def augment(self, *args):
+            Counting.calls += 1
+            return super().augment(*args)
+
+    build("binclass", augmenter=Counting(), n_fills=3)
+    assert Counting.calls == 3

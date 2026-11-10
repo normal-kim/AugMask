@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import ema_update, set_seed, to_tensors, train_batches
+from .common import as_fills, ema_update, rotating_batches, set_seed, to_tensors
 
 DEFAULTS = dict(
     # UniModMLP denoiser
@@ -149,7 +149,7 @@ class TabDiff:
 
     def fit(self, train, val=None, seed: int = 0) -> "TabDiff":
         """Train for ``train_steps`` (``val`` is unused: early stopping is off). Afterwards ``self.net_`` holds the EMA
-        weights, which are used for sampling."""
+        weights, which are used for sampling. ``train`` may be a list of fills of the same rows, used in turn."""
         c = self.config
         set_seed(seed)
         self.net_ = _Net(self.n_num, self.K, c["d_token"], c["dim_t"], c["n_layers"], c["n_units"],
@@ -158,7 +158,7 @@ class TabDiff:
         opt = torch.optim.AdamW(self.net_.parameters(), lr=c["lr"], weight_decay=c["weight_decay"])
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=c["lr_factor"],
                                                            patience=c["lr_patience"], min_lr=c["min_lr"])
-        batches = train_batches(to_tensors(train, self.device), c["batch_size"])
+        batches = rotating_batches([to_tensors(t, self.device) for t in as_fills(train)], c["batch_size"])
         self.history_ = []
         for step in range(c["train_steps"]):
             opt.zero_grad()

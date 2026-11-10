@@ -52,3 +52,10 @@ def test_loss_mask_drops_unobserved_entries():
             assert loss.item() == 0 and grad_max == 0
         else:
             assert loss.item() > 0 and grad_max > 0
+
+
+def test_fills_are_rotated():
+    fit = lambda train: CDTD(3, K, True, device="cpu", **TINY).fit(train, toy(40, 1)).sample(20, seed=3)
+    one, listed = fit(toy(100, 0)), fit([toy(100, 0)])
+    assert all(np.array_equal(a, b) for a, b in zip(one, listed))  # one fill in a list is the same run
+    assert np.isfinite(fit([toy(100, 0), toy(100, 5)])[0]).all()

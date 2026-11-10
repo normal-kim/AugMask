@@ -55,7 +55,8 @@ class Encoded(NamedTuple):
 class Augmenter(Protocol):
     """Fills the missing entries: fit on ``train``, then return filled (X_num, X_cat) for ``train``
     followed by each of ``others``. Observed entries stay unchanged; a missing numerical entry gets a
-    float and a missing categorical entry a code in 0..K_j-1."""
+    float and a missing categorical entry a code in 0..K_j-1. With several fills per scenario
+    (``n_fills`` > 1), ``augment`` is called once per fill and should return a new random draw each time."""
 
     def augment(self, train: Encoded, others: Sequence[Encoded], n_categories: Sequence[int]
                 ) -> list[tuple[np.ndarray, np.ndarray]]: ...
@@ -99,14 +100,16 @@ class LGBMSAugmenter:
     probabilities after label smoothing with alpha over the K_j categories.
     Every model conditions on the incomplete data as observed (no chaining).
     Features are fit in parallel on ``n_jobs`` threads (-1: all cores); the fills do not depend on it.
+    ``draw`` indexes independent fills from the same models (draw 0 is the default stream).
     """
 
     def __init__(self, alpha: float = 0.05, eps: float = 1e-6, log_var_offset: float = 0.0,
-                 seed: int = 42, n_jobs: int = -1, lgbm_params: dict | None = None):
+                 seed: int = 42, n_jobs: int = -1, lgbm_params: dict | None = None, draw: int = 0):
         self.alpha = alpha
         self.eps = eps
         self.log_var_offset = log_var_offset
         self.seed = seed
+        self.draw = draw
         self.n_jobs = (os.cpu_count() or 1) if n_jobs == -1 else n_jobs
         self.lgbm_params = {**LGBM_PARAMS, **(lgbm_params or {})}
 
@@ -117,7 +120,8 @@ class LGBMSAugmenter:
         designs = [_design(b, n_categories) for b in blocks]
         d_num = train.X_num.shape[1]
         features = [("num", k) for k in range(d_num)] + [("cat", k) for k in range(len(n_categories))]
-        rngs = [np.random.default_rng(s) for s in np.random.SeedSequence(self.seed).spawn(len(features))]
+        root = np.random.SeedSequence(self.seed if self.draw == 0 else [self.seed, self.draw])
+        rngs = [np.random.default_rng(s) for s in root.spawn(len(features))]
 
         def run(i):
             kind, k = features[i]

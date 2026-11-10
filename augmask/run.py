@@ -3,6 +3,8 @@
     python -m augmask.run --dataset adult --mechanism mcar --p 0.5 --method cdtd-augmask
 
 Methods: {tabddpm,cdtd,tabdiff}-{noaug,meanmask,augfull,augmask}, forestdiff, miwae.
+In augfull/augmask, the missing train inputs get ``--fills`` (default 5) independent fills, used in turn
+during training (one per step); ``--fills 1`` is the single fill of the paper.
 From Python, ``run(..., augmenter=...)`` swaps LGBM-S for any ``augmask.Augmenter`` in augfull/augmask.
 Masks and LGBM-S fills are read from (or written to) <artifacts>/<dataset>/<mechanism>/p<p>/seed<seed>.npz.
 """
@@ -19,6 +21,7 @@ import pandas as pd
 
 from .augment import MeanModeFill
 from .data import build_scenario, load_artifact, save_artifact, split_indices
+from .data.scenario import artifact_fills
 from .data.datasets import DATASETS, load_dataset
 from .evaluate import evaluate, mle, sample_checks
 
@@ -27,6 +30,7 @@ STRATEGIES = {"noaug": ("mean", False), "meanmask": ("mean", True),
               "augfull": ("augment", False), "augmask": ("augment", True)}
 BACKBONES = {"tabddpm": "TabDDPM", "cdtd": "CDTD", "tabdiff": "TabDiff"}
 BASELINES = ("forestdiff", "miwae")
+FILLS = 5  # augmented fills per scenario in augfull/augmask
 METHODS = tuple(f"{b}-{s}" for b in BACKBONES for s in STRATEGIES) + BASELINES
 
 
@@ -34,19 +38,19 @@ def artifact_path(root, dataset, mechanism, p, seed) -> Path:
     return Path(root) / dataset / mechanism / f"p{p}" / f"seed{seed}.npz"
 
 
-def scenario_for(df, schema, split, dataset, mechanism, p, seed, augmenter, artifacts):
+def scenario_for(df, schema, split, dataset, mechanism, p, seed, augmenter, artifacts, n_fills=1):
     """Build a scenario, reusing saved masks/fills when available (and saving them otherwise)."""
     path = artifact_path(artifacts, dataset, mechanism, p, seed)
     art = load_artifact(path) if path.exists() else None
-    scn = build_scenario(df, schema, split, mechanism, p, seed, augmenter=augmenter, artifact=art)
-    if art is None and scn.default_fills:
+    scn = build_scenario(df, schema, split, mechanism, p, seed, augmenter=augmenter, artifact=art, n_fills=n_fills)
+    if scn.default_fills and (art is None or artifact_fills(art) < len(scn.train_draws)):
         path.parent.mkdir(parents=True, exist_ok=True)
         save_artifact(scn, path)
     return scn
 
 
 def run(dataset, mechanism, p, method, seed=0, artifacts="artifacts", out="runs", device="cuda", augmenter=None,
-        **config):
+        fills=FILLS, **config):
     if method not in METHODS:
         raise ValueError(f"method must be one of {METHODS}")
     df, schema = load_dataset(dataset)
@@ -59,8 +63,10 @@ def run(dataset, mechanism, p, method, seed=0, artifacts="artifacts", out="runs"
     backbone, _, strategy = method.partition("-")
     fill, loss_mask = STRATEGIES.get(strategy, ("mean", False))
     augmenter = MeanModeFill() if fill == "mean" else augmenter  # None: the default LGBM-S
-    scn = scenario_for(df, schema, split, dataset, mechanism, p, seed, augmenter, artifacts)
-    train = (scn.X_num["train"], scn.X_cat["train"], scn.M_num["train"], scn.M_cat["train"])
+    scn = scenario_for(df, schema, split, dataset, mechanism, p, seed, augmenter, artifacts,
+                       n_fills=fills if fill == "augment" else 1)
+    train = [(X_num, X_cat, scn.M_num["train"], scn.M_cat["train"]) for X_num, X_cat in scn.train_fills]
+    train = train if len(train) > 1 else train[0]
     val = (scn.X_num["val"], scn.X_cat["val"], scn.M_num["val"], scn.M_cat["val"])
 
     start = time.time()
@@ -76,7 +82,7 @@ def run(dataset, mechanism, p, method, seed=0, artifacts="artifacts", out="runs"
         syn = scn.to_data_space(*model.sample(n))
     else:
         cls = getattr(importlib.import_module(f".models.{backbone}", __package__), BACKBONES[backbone])
-        model = cls(train[0].shape[1], scn.n_categories, loss_mask=loss_mask, device=device, **config)
+        model = cls(scn.X_num["train"].shape[1], scn.n_categories, loss_mask=loss_mask, device=device, **config)
         syn = scn.to_data_space(*model.fit(train, val, seed=seed).sample(n, seed=42 + seed))
 
     seconds = time.time() - start
@@ -104,6 +110,7 @@ def main():
     ap.add_argument("--p", required=True, type=float)
     ap.add_argument("--method", required=True, choices=METHODS)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--fills", type=int, default=FILLS, help="augmented fills of the train inputs (augfull/augmask)")
     ap.add_argument("--artifacts", default="artifacts")
     ap.add_argument("--out", default="runs")
     ap.add_argument("--device", default="cuda")
