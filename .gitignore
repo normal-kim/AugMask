@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+# downloaded raw data, built tables, artifacts, runs
+datasets/
+artifacts/
+runs/

@@ -1,0 +1,22 @@
+# Exact environment used for the release runs (CUDA 12.1 wheels).
+#   conda env create -f environment.yml && conda activate augmask
+name: augmask
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - torch==2.2.2
+      - numpy==1.26.4
+      - pandas==2.2.3
+      - scipy==1.11.4
+      - scikit-learn==1.6.1
+      - lightgbm==4.6.0
+      - xgboost==2.1.4
+      - sdmetrics==0.17.1
+      - xlrd==2.0.2
+      - ForestDiffusion==1.0.6
+      - pytest==9.2.0
+      - -e .

@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the paper below."
+title: "AugMask"
+repository-code: "https://github.com/normal-kim/AugMask"
+license: MIT
+authors:
+  - family-names: Kim
+    given-names: Jungkyu
+  - family-names: Park
+    given-names: Taeyoung
+  - family-names: Lee
+    given-names: Kibok
+preferred-citation:
+  type: conference-paper
+  title: "AugMask: Training Diffusion Models on Incomplete Tabular Data via Stochastic Augmentation and Masking"
+  authors:
+    - family-names: Kim
+      given-names: Jungkyu
+    - family-names: Park
+      given-names: Taeyoung
+    - family-names: Lee
+      given-names: Kibok
+  collection-title: "Proceedings of the 43rd International Conference on Machine Learning"
+  collection-type: proceedings
+  volume: 306
+  year: 2026
+  conference:
+    name: "International Conference on Machine Learning (ICML)"
+  url: "https://arxiv.org/abs/2606.03347"
