@@ -3,7 +3,7 @@
 Official code for **AugMask: Training Diffusion Models on Incomplete Tabular Data via Stochastic Augmentation and Masking** (ICML 2026).
 Jungkyu Kim, Taeyoung Park, Kibok Lee. [[arXiv]](https://arxiv.org/abs/2606.03347) [[OpenReview]](https://openreview.net/forum?id=Ot8lh7vvGe)
 
-## Why AugMask
+## 💡 Why AugMask
 
 **Diffusion models for tabular data are built for complete rows**, but real tables have missing entries. The usual workarounds fail:
 
@@ -22,7 +22,7 @@ AugMask fixes both:
 
 AugMask needs no change to the model itself. This repository applies it to three diffusion models: [TabDDPM](https://proceedings.mlr.press/v202/kotelnikov23a.html) (ICML 2023; [code](https://github.com/yandex-research/tab-ddpm)), [CDTD](https://proceedings.iclr.cc/paper_files/paper/2025/hash/61f4e5747b1b753cb35546b15d981f76-Abstract-Conference.html) (ICLR 2025; [code](https://github.com/muellermarkus/cdtd)) and [TabDiff](https://proceedings.iclr.cc/paper_files/paper/2025/hash/5c882988ce5fac487974ee4f415b96a9-Abstract-Conference.html) (ICLR 2025; [code](https://github.com/MinkaiXu/TabDiff)).
 
-## Install
+## 📦 Install
 
 Python 3.10–3.12.
 
@@ -32,7 +32,7 @@ conda env create -f environment.yml && conda activate augmask   # the exact envi
 pip install -e ".[all]"                                          # everything (pip install -e . for the augmentation alone)
 ```
 
-## Use AugMask with your own model
+## 🧩 Use AugMask with your own model
 
 ```python
 from augmask import Encoded, LGBMSAugmenter
@@ -71,7 +71,7 @@ class MyAugmenter:
 run("adult", "mcar", 0.5, "tabdiff-augmask", augmenter=MyAugmenter())
 ```
 
-## Run
+## 🚀 Run
 
 Datasets are downloaded from UCI on first use.
 
@@ -106,11 +106,12 @@ Methods are `{tabddpm,cdtd,tabdiff}-{noaug,meanmask,augfull,augmask}`, plus the 
 | 50% | 4.5 s | 2.3 s | 1.5 s | 0.3 s | 4.1 s | 4.9 s |
 | 90% | 6.0 s | 2.0 s | 1.1 s | 0.3 s | 5.8 s | 2.9 s |
 
-## Reference results
+## 📊 Reference results
 
 Adult and Beijing, MCAR with 50% and 90% missing, one seed, averaged over the four scenarios (×100, best in bold). Utility is downstream task performance: a model trained on synthetic rows and tested on real ones, relative to training on real rows.
 
-Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martineau24a.html) (AISTATS 2024) and [MIWAE](https://proceedings.mlr.press/v97/mattei19a.html) (ICML 2019). Missing-unaware, trained with the four strategies above: [TabDDPM](https://proceedings.mlr.press/v202/kotelnikov23a.html) (ICML 2023), [CDTD](https://proceedings.iclr.cc/paper_files/paper/2025/hash/61f4e5747b1b753cb35546b15d981f76-Abstract-Conference.html) (ICLR 2025) and [TabDiff](https://proceedings.iclr.cc/paper_files/paper/2025/hash/5c882988ce5fac487974ee4f415b96a9-Abstract-Conference.html) (ICLR 2025).
+- **Missing-aware:** [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martineau24a.html) (AISTATS 2024) and [MIWAE](https://proceedings.mlr.press/v97/mattei19a.html) (ICML 2019).
+- **Missing-unaware**, trained with the four strategies above: [TabDDPM](https://proceedings.mlr.press/v202/kotelnikov23a.html) (ICML 2023), [CDTD](https://proceedings.iclr.cc/paper_files/paper/2025/hash/61f4e5747b1b753cb35546b15d981f76-Abstract-Conference.html) (ICLR 2025) and [TabDiff](https://proceedings.iclr.cc/paper_files/paper/2025/hash/5c882988ce5fac487974ee4f415b96a9-Abstract-Conference.html) (ICLR 2025).
 
 | Method | Shape ↑ | Trend ↑ | α-Precision ↑ | β-Recall ↑ | Utility ↑ |
 |---|---:|---:|---:|---:|---:|
@@ -210,7 +211,7 @@ Missing-aware: [ForestDiff](https://proceedings.mlr.press/v238/jolicoeur-martine
 
 </details>
 
-## Pipeline
+## 🔧 Pipeline
 
 1. **Collect** the six UCI tables (Adult, Default, Shoppers, Magic, Beijing, News).
 2. **Split** each table 60/20/20 into train, validation and test.
@@ -252,13 +253,13 @@ tests/                   # pipeline, missingness, baselines, evaluation, each ba
 
 </details>
 
-## Notes on this release
+## 📝 Notes on this release
 
-The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Model and training settings follow Appendix C.6 of the paper, except that CDTD trains its full schedule and keeps the final weights instead of early stopping: its validation loss is noisy enough to stop some runs after 10% of training. AugFull and AugMask alternate between 5 fills of the missing inputs during training for improved performance (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
+The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Most model and training settings follow Appendix C.6 of the paper. The exception is alternating fills: AugFull and AugMask alternate between 5 fills of the missing inputs during training, which performs better at high missing rates in this implementation (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
 
 LGBM-S is a per-coordinate augmenter: it draws each missing entry independently given the observed ones, so it does not model the dependence between entries that are missing together. An augmenter that samples the missing coordinates jointly is a natural direction for future work, and can be plugged in as described in [Your own augmenter](#your-own-augmenter).
 
-## Citation
+## 📚 Citation
 
 ```bibtex
 @inproceedings{kim2026augmask,
@@ -271,7 +272,7 @@ LGBM-S is a per-coordinate augmenter: it draws each missing entry independently 
 }
 ```
 
-## Acknowledgements
+## 🙏 Acknowledgements
 
 The backbones are adapted from [TabDDPM](https://github.com/yandex-research/tab-ddpm), [CDTD](https://github.com/muellermarkus/cdtd) and [TabDiff](https://github.com/MinkaiXu/TabDiff) (MIT). The metrics follow [TabSyn](https://github.com/amazon-science/tabsyn) (Apache-2.0), α-Precision/β-Recall follow [synthcity](https://github.com/vanderschaarlab/synthcity), and MIWAE follows [hyperimpute](https://github.com/vanderschaarlab/hyperimpute) (MIT). ForestDiff uses the official [ForestDiffusion](https://github.com/SamsungSAILMontreal/ForestDiffusion) package.
 
