@@ -27,8 +27,7 @@ AugMask needs no change to the model itself. This repository applies it to three
 Python 3.10–3.12.
 
 ```bash
-pip install augmask            # the augmentation (LGBM-S) alone
-pip install "augmask[all]"     # plus the diffusion backbones, baselines and evaluation
+pip install augmask
 ```
 
 To run the experiments, clone this repository and create the exact environment used for the results:
