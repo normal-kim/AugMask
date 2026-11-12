@@ -1,7 +1,12 @@
 # AugMask
 
 Official code for **AugMask: Training Diffusion Models on Incomplete Tabular Data via Stochastic Augmentation and Masking** (ICML 2026).
-Jungkyu Kim, Taeyoung Park, Kibok Lee. [[arXiv]](https://arxiv.org/abs/2606.03347) [[OpenReview]](https://openreview.net/forum?id=Ot8lh7vvGe)
+Jungkyu Kim, Taeyoung Park, Kibok Lee.
+
+[![Paper](https://img.shields.io/badge/Paper-ICML%202026-1f6feb)](https://openreview.net/forum?id=Ot8lh7vvGe)
+[![arXiv](https://img.shields.io/badge/arXiv-2606.03347-b31b1b?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2606.03347)
+[![PyPI](https://img.shields.io/pypi/v/augmask?label=PyPI&color=3775a9&logo=pypi&logoColor=white)](https://pypi.org/project/augmask/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](https://github.com/normal-kim/AugMask/blob/main/LICENSE)
 
 ## 💡 Why AugMask
 
