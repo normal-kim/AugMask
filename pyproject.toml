@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "augmask"
-version = "0.1.1"
+version = "0.1.2"
 description = "AugMask: training diffusion models on incomplete tabular data via stochastic augmentation and masking (ICML 2026)"
 readme = "README.md"
 license = "MIT"
