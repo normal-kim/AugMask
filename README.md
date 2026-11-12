@@ -7,13 +7,13 @@ Jungkyu Kim, Taeyoung Park, Kibok Lee. [[arXiv]](https://arxiv.org/abs/2606.0334
 
 **Diffusion models for tabular data are built for complete rows**, but real tables have missing entries. The usual workarounds fail:
 
-- **Constant fills become data.** Trained on mean-filled rows, the model learns the fills as real values. Below, filled rows collapse onto a cross at the means, and TabDiff then generates about half of its rows exactly there.
-- **Masking the loss is not enough.** Filled entries left out of the loss are still read as inputs, so the model learns from rows that real data rarely contains, such as a hot day paired with the average dew point.
+- **Constant fills become data.** A model trained on mean-filled rows *treats the fills as observed values* and learns to reproduce them. Below, the filled rows collapse onto a cross at the column means.
+- **Masking the loss is not enough.** Filled entries left out of the loss are *still read as inputs*, so the model learns from rows that real data rarely contains, such as a hot day paired with the average dew point.
 
 AugMask fixes both:
 
-1. **Augment.** Each missing entry is filled with a random draw from a model of its column given the other columns, so the inputs look like real data (right panel). This repository uses LGBM-S, a set of lightweight per-column LightGBM models, as the augmenter.
-2. **Mask.** The denoising loss is computed on observed entries only, so the filled values give context but are never targets.
+1. **Augment.** A missing entry is *unrealized data that could take many different values*, so AugMask *samples* it instead of imputing it deterministically. Each missing entry $x_j$ is drawn from a conditional model of its column, $x_j \sim \hat{p}_j(x_j \mid x_{\mathrm{obs}}, m)$: the augmenter receives the row's observed values $x_{\mathrm{obs}}$ and its missingness mask $m$ as inputs. This repository uses LGBM-S, lightweight per-column LightGBM models, as the augmenter; the sampled rows resemble the complete data (right panel).
+2. **Mask.** The denoising loss is computed on observed entries only, so the sampled values serve as *context, never as targets*.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/overview_dark.png">
@@ -53,7 +53,7 @@ The augmenter takes an encoded table with `n` rows:
 | `M_num`, `M_cat` | same as above | bool | `True` where observed |
 | `n_categories` | `d_cat` | list of int | number of categories `K_j` of each categorical column |
 
-`augment` returns `X_num` and `X_cat` with every missing entry filled; each `draw` gives an independent fill, with the observed entries unchanged. In this repository the backbones then receive the fills, one per training step, as `X_num` (float32, standardized) and `X_cat` (int64 codes), together with the masks, with the target as one of the columns (the first numerical column for regression, the first categorical column for classification).
+`augment` returns `X_num` and `X_cat` with every missing entry filled; each `draw` gives an independent fill, with the observed entries unchanged. In this repository, the backbones receive one fill per training step: `X_num` (float32, standardized) and `X_cat` (int64 codes), together with the masks. The target is one of the columns (the first numerical column for regression, the first categorical column for classification).
 
 ### Your own augmenter
 
@@ -92,8 +92,8 @@ Methods are `{tabddpm,cdtd,tabdiff}-{noaug,meanmask,augfull,augmask}`, plus the 
 |---|---|---|
 | `noaug` | train mean / mode | all entries |
 | `meanmask` | train mean / mode | observed entries (similar to [MissDiff](https://arxiv.org/abs/2307.00467); Ouyang et al., 2023) |
-| `augfull` (ours) | augmented draws (LGBM-S) | all entries |
-| `augmask` (ours) | augmented draws (LGBM-S) | observed entries |
+| `augfull` (ours) | samples from the augmenter (LGBM-S) | all entries |
+| `augmask` (ours) | samples from the augmenter (LGBM-S) | observed entries |
 
 **Alternating fills.** For improved performance, this implementation gives `augfull` and `augmask` 5 independent fills of the missing inputs and alternates between them during training, one per step (`--fills 5`, the default). `--fills 1` uses the single fill of the paper. The gain is largest at high missing rates.
 
@@ -218,7 +218,7 @@ Adult and Beijing, MCAR with 50% and 90% missing, one seed, averaged over the fo
 2. **Split** each table 60/20/20 into train, validation and test.
 3. **Mask** train and validation entries (the target included) completely at random (MCAR) or depending on the other columns (MAR); the test split stays complete.
 4. **Encode**, using the observed train entries: numerical columns are quantile-normal transformed, categorical columns are integer encoded.
-5. **Fill** the missing entries with the train mean / mode, or with augmented draws (LGBM-S by default; 5 fills, alternated during training).
+5. **Fill** the missing entries with the train mean / mode, or *sample* them with the augmenter (LGBM-S by default; 5 fills, alternated during training).
 6. **Standardize** the numerical columns.
 7. **Train** the backbone and sample as many rows as the train split.
 8. **Map** the samples back to the original columns and values.
@@ -258,7 +258,7 @@ tests/                   # pipeline, missingness, baselines, evaluation, each ba
 
 The data pipeline was rebuilt for this release (60/20/20 split, a new MAR generator), so numbers differ slightly from the paper. Most model and training settings follow Appendix C.6 of the paper. The exception is alternating fills: AugFull and AugMask alternate between 5 fills of the missing inputs during training, which performs better at high missing rates in this implementation (`--fills 1` restores the paper's single fill). LGBM-S follows Algorithm 1; `LGBMSAugmenter(log_var_offset=augmask.augment.LOG_CHI2_BIAS)` optionally corrects the downward bias of its variance model.
 
-LGBM-S is a per-coordinate augmenter: it draws each missing entry independently given the observed ones, so it does not model the dependence between entries that are missing together. An augmenter that samples the missing coordinates jointly is a natural direction for future work, and can be plugged in as described in [Your own augmenter](#your-own-augmenter).
+LGBM-S is a per-coordinate augmenter: it samples each missing entry independently given the observed values and the mask, so it does not model the dependence between entries that are missing together. An augmenter that samples the missing coordinates jointly is a natural direction for future work, and can be plugged in as described in [Your own augmenter](#your-own-augmenter).
 
 ## 📚 Citation
 

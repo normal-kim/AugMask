@@ -87,9 +87,9 @@ def draw(rows, data, t, path):
     ax.set_axis_off()
     mask = np.array([[1, 0, 1, 1, 0, 1], [0, 1, 1, 0, 1, 1], [1, 1, 0, 1, 1, 0], [1, 0, 1, 1, 1, 1]], bool)
     grid(ax, 0, mask, t["filled"], t, "Inputs: missing entries augmented",
-         "drawn by the augmenter (LGBM-S)\ngiven the other columns")
+         "sampled by LGBM-S given the\nobserved values and the mask")
     grid(ax, 14, mask, t["off"], t, "Loss: observed entries only",
-         "filled values are context,\nnever targets", crossed=True)
+         "sampled values are context,\nnever targets", crossed=True)
     ax.add_patch(FancyArrowPatch((6.6, 2), (13.4, 2), arrowstyle="-|>", mutation_scale=18, color=t["muted"], lw=1.5))
     ax.text(10.0, 2.35, "denoiser", ha="center", va="bottom", color=t["muted"], fontsize=10)
     ax.set(xlim=(-4.0, 24.0), ylim=(-2.6, 5.4), aspect="equal")
