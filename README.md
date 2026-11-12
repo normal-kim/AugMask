@@ -12,7 +12,7 @@ Jungkyu Kim, Taeyoung Park, Kibok Lee. [[arXiv]](https://arxiv.org/abs/2606.0334
 
 AugMask fixes both:
 
-1. **Augment.** A missing entry is *unrealized data that could take many different values*, so AugMask *samples* it instead of imputing it deterministically. Each missing entry $x_j$ is drawn from a conditional model of its column, $x_j \sim \hat{p}_j(x_j \mid x_{\mathrm{obs}}, m)$: the augmenter receives the row's observed values $x_{\mathrm{obs}}$ and its missingness mask $m$ as inputs. This repository uses LGBM-S, lightweight per-column LightGBM models, as the augmenter; the sampled rows resemble the complete data (right panel).
+1. **Augment.** A missing entry is *unrealized data that could take many different values*, so AugMask *samples* it instead of imputing it deterministically. Each missing entry $`x_j`$ is drawn from a conditional model of its column, $`x_j \sim \hat{p}_j(x_j \mid x_{\mathrm{obs}}, m)`$: the augmenter receives the row's observed values $`x_{\mathrm{obs}}`$ and its missingness mask $`m`$ as inputs. This repository uses LGBM-S, lightweight per-column LightGBM models, as the augmenter; the sampled rows resemble the complete data (right panel).
 2. **Mask.** The denoising loss is computed on observed entries only, so the sampled values serve as *context, never as targets*.
 
 <picture>
