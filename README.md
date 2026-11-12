@@ -16,8 +16,8 @@ AugMask fixes both:
 2. **Mask.** The denoising loss is computed on observed entries only, so the sampled values serve as *context, never as targets*.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/overview_dark.png">
-  <img src="assets/overview_light.png" alt="Mean filling collapses rows onto a cross at the column means; augmented fills follow the joint distribution. Inputs are filled, and the loss uses observed entries only." width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/normal-kim/AugMask/main/assets/overview_dark.png">
+  <img src="https://raw.githubusercontent.com/normal-kim/AugMask/main/assets/overview_light.png" alt="Mean filling collapses rows onto a cross at the column means; augmented fills follow the joint distribution. Inputs are filled, and the loss uses observed entries only." width="100%">
 </picture>
 
 AugMask needs no change to the model itself. This repository applies it to three diffusion models: [TabDDPM](https://proceedings.mlr.press/v202/kotelnikov23a.html) (ICML 2023; [code](https://github.com/yandex-research/tab-ddpm)), [CDTD](https://proceedings.iclr.cc/paper_files/paper/2025/hash/61f4e5747b1b753cb35546b15d981f76-Abstract-Conference.html) (ICLR 2025; [code](https://github.com/muellermarkus/cdtd)) and [TabDiff](https://proceedings.iclr.cc/paper_files/paper/2025/hash/5c882988ce5fac487974ee4f415b96a9-Abstract-Conference.html) (ICLR 2025; [code](https://github.com/MinkaiXu/TabDiff)).
@@ -27,9 +27,15 @@ AugMask needs no change to the model itself. This repository applies it to three
 Python 3.10–3.12.
 
 ```bash
-conda env create -f environment.yml && conda activate augmask   # the exact environment used for the results
-# or
-pip install -e ".[all]"                                          # everything (pip install -e . for the augmentation alone)
+pip install augmask            # the augmentation (LGBM-S) alone
+pip install "augmask[all]"     # plus the diffusion backbones, baselines and evaluation
+```
+
+To run the experiments, clone this repository and create the exact environment used for the results:
+
+```bash
+git clone https://github.com/normal-kim/AugMask.git && cd AugMask
+conda env create -f environment.yml && conda activate augmask
 ```
 
 ## 🧩 Use AugMask with your own model

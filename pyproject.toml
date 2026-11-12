@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,19 @@ name = "augmask"
 version = "0.1.0"
 description = "AugMask: training diffusion models on incomplete tabular data via stochastic augmentation and masking (ICML 2026)"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10,<3.13"
+keywords = ["diffusion models", "tabular data", "missing data", "data augmentation", "synthetic data"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 authors = [
   { name = "Jungkyu Kim" },
   { name = "Taeyoung Park" },
@@ -32,6 +44,10 @@ eval = ["xgboost>=2.0", "sdmetrics>=0.17"]
 baselines = ["ForestDiffusion==1.0.6"]
 dev = ["pytest>=7", "matplotlib>=3.7"]  # tests and the README figure
 all = ["augmask[torch,data,eval,baselines,dev]"]
+
+[project.urls]
+Homepage = "https://github.com/normal-kim/AugMask"
+Paper = "https://arxiv.org/abs/2606.03347"
 
 [tool.setuptools.packages.find]
 include = ["augmask*"]
